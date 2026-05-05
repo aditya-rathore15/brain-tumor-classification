@@ -4,6 +4,7 @@ A deep learning project for multi-class brain tumor classification using brain M
 
 This project explores transfer learning, model evaluation, and interpretability techniques for medical image classification.
 
+
 ## Overview
 
 The goal is to classify brain MRI images into four categories:
@@ -13,7 +14,12 @@ The goal is to classify brain MRI images into four categories:
 - Pituitary
 - No Tumor
 
-The project focuses on building strong baselines, comparing model architectures, and analyzing model behavior through interpretability techniques.
+The project focuses on:
+- Transfer learning experiments
+- Model comparison
+- Interpretability analysis
+- Failure-case analysis
+
 
 ## Dataset
 
@@ -34,8 +40,9 @@ Dataset split:
 
 Current experiments:
 
-- ResNet-18 (ImageNet pretrained, full fine-tuning)
-- ResNet-50 (ImageNet pretrained, full fine-tuning)
+- ResNet-18 (Frozen Backbone)
+- ResNet-18 (Fine-tuned)
+- ResNet-50 (Fine-tuned)
 
 Framework:
 - PyTorch
@@ -62,22 +69,41 @@ The models are evaluated using:
 
 These metrics provide better class-wise understanding beyond overall accuracy.
 
+
 ## Current Results
 
-### ResNet-18
+### ResNet-18 (Frozen)
+- Accuracy: ~77.0%
+- Macro F1 Score: ~76.2%
+- Glioma Recall: ~70%
+
+### ResNet-18 (Fine-tuned)
 - Accuracy: ~95.3%
 - Macro F1 Score: ~95.2%
 - Glioma Recall: ~82%
 
-### ResNet-50
+### ResNet-50 (Fine-tuned)
 - Accuracy: ~95.6%
 - Macro F1 Score: ~95.5%
 - Glioma Recall: ~84%
 
 Key observations:
-- ResNet-50 shows a small but consistent improvement over ResNet-18.
-- Performance gains are most noticeable on glioma cases.
-- Pituitary remains the strongest-performing class across both models.
+- Fine-tuning provides major performance gains over frozen transfer learning.
+- ResNet-50 shows small but consistent improvements over ResNet-18.
+- Performance improvements are most noticeable in harder classes like glioma.
+
+
+## Transfer Learning Insights
+
+Key findings:
+
+- Frozen transfer learning is insufficient for this medical imaging task.
+- Full fine-tuning significantly improves domain adaptation.
+- Medical imaging benefits from feature adaptation beyond ImageNet pretraining.
+
+Main insight:
+
+MRI image representations differ substantially from natural image representations, making fine-tuning essential.
 
 
 ## Model Interpretability (Grad-CAM)
@@ -87,7 +113,7 @@ Grad-CAM is used to visualize model attention and understand prediction behavior
 Observations:
 - ResNet-18 shows broader and more diffuse attention for glioma cases.
 - ResNet-50 produces more localized activation patterns.
-- Meningioma and pituitary consistently show focused tumor-relevant regions.
+- Meningioma and pituitary consistently show focused discriminative regions.
 - Failure-case analysis shows that false negatives often correspond to mislocalized attention.
 
 Key insight:
@@ -99,12 +125,13 @@ Higher classification difficulty (especially glioma) correlates with less focuse
 
 Failure-case analysis was performed on incorrectly classified samples.
 
-Example observation:
-- A glioma sample was misclassified as no-tumor.
-- Grad-CAM visualization showed mislocalized attention away from the tumor region.
+Example:
+- Glioma misclassified as No Tumor
+- Grad-CAM showed mislocalized attention away from likely discriminative regions
 
-This suggests that incorrect predictions often arise when the model focuses on non-discriminative regions.
+Key insight:
 
+Incorrect predictions often correspond to weak or misaligned visual attention.
 
 ## Running the Project
 
@@ -114,13 +141,19 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
-Train ResNet-18:
+Train ResNet-18 (Frozen):
+
+```bash
+python src/training/train_resnet18_frozen.py
+```
+
+Train ResNet-18 (Fine-tuned):
 
 ```bash
 python src/training/train_baseline.py
 ```
 
-Train ResNet-50:
+Train ResNet-50 (Fine-tuned):
 
 ```bash
 python src/training/train_resnet50.py
@@ -142,9 +175,9 @@ python src/analysis/error_analysis.py
 
 ## Future Work
 
-- Compare frozen vs fine-tuned ResNet-18
 - Experiment with Vision Transformers (ViT)
 - Improve augmentation strategy for harder classes
 - Experiment with class-weighted loss for glioma sensitivity
 - Analyze more failure cases across all classes
+- Compare higher-resolution inputs
 - Build an agentic medical report generation pipeline
