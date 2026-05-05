@@ -141,7 +141,7 @@ def visualize_gradcam(image_path):
 
     visualization = show_cam_on_image(img, grayscale_cam, use_rgb=True)
 
-    save_path = "gradcam_output.jpg"
+    save_path = f"outputs/gradcam_{os.path.basename(image_path)}"
     cv2.imwrite(save_path, cv2.cvtColor(visualization, cv2.COLOR_RGB2BGR))
 
     print(f"Saved Grad-CAM visualization to {save_path}")
@@ -168,3 +168,6 @@ if __name__ == "__main__":
         print(f"F1 Score: {f1:.4f}")
     
     visualize_gradcam("data/Testing/glioma/Te-gl_100.jpg")
+    visualize_gradcam("data/Testing/meningioma/Te-me_10.jpg")
+    visualize_gradcam("data/Testing/notumor/Te-no_20.jpg")
+    visualize_gradcam("data/Testing/pituitary/Te-pi_50.jpg")
