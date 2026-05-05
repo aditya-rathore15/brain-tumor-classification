@@ -3,10 +3,14 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
+import cv2
 from torchvision import datasets, transforms
 from torchvision.models import resnet18, ResNet18_Weights
 from torch.utils.data import DataLoader
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, classification_report
+from pytorch_grad_cam import GradCAM
+from pytorch_grad_cam.utils.image import show_cam_on_image
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
 DEVICE = (
     "cuda" if torch.cuda.is_available()
@@ -53,6 +57,10 @@ print("Classes:", train_dataset.classes)
 model = resnet18(weights=ResNet18_Weights.DEFAULT)
 model.fc = nn.Linear(model.fc.in_features, NUM_CLASSES)
 model = model.to(DEVICE)
+
+# Grad-CAM Setup
+target_layer = model.layer4[-1]
+cam = GradCAM(model=model, target_layers=[target_layer])
 
 # Loss & Optimizer
 criterion = nn.CrossEntropyLoss()
@@ -110,6 +118,34 @@ def evaluate():
 
     return acc, precision, recall, f1
 
+# Grad-CAM Visualization
+def visualize_gradcam(image_path):
+    model.eval()
+
+    # Load image
+    img = cv2.imread(image_path)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img = cv2.resize(img, (224, 224))
+    img = img / 255.0
+
+    # Transform
+    input_tensor = test_transforms(
+        transforms.ToPILImage()(img.astype(np.float32))
+    ).unsqueeze(0).to(DEVICE)
+
+    output = model(input_tensor)
+    pred_class = torch.argmax(output, dim=1).item()
+
+    targets = [ClassifierOutputTarget(pred_class)]
+    grayscale_cam = cam(input_tensor=input_tensor, targets=targets)[0]
+
+    visualization = show_cam_on_image(img, grayscale_cam, use_rgb=True)
+
+    save_path = "gradcam_output.jpg"
+    cv2.imwrite(save_path, cv2.cvtColor(visualization, cv2.COLOR_RGB2BGR))
+
+    print(f"Saved Grad-CAM visualization to {save_path}")
+
 
 if __name__ == "__main__":
     best_acc = 0
@@ -130,3 +166,5 @@ if __name__ == "__main__":
         print(f"Precision: {precision:.4f}")
         print(f"Recall: {recall:.4f}")
         print(f"F1 Score: {f1:.4f}")
+    
+    visualize_gradcam("data/Testing/glioma/Te-gl_100.jpg")
