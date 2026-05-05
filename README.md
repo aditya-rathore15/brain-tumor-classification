@@ -78,6 +78,7 @@ Observations:
 - Pituitary shows meaningful regional attention
 - Glioma shows broader and more diffuse activation patterns
 
-Key insight:
-
-Although the model achieves high classification accuracy (~95%), Grad-CAM visualizations suggest that harder classes (especially glioma) correspond to less focused model attention.
+### Key insights:
+- Higher classification difficulty (especially glioma) correlates with less focused model attention.
+- Correct predictions generally align with tumor-relevant activation regions.
+- Failure-case analysis shows that false negatives often correspond to mislocalized attention, where the model focuses on non-discriminative regions.
