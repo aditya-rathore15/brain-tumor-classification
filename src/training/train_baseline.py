@@ -4,13 +4,15 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import cv2
+
 from torchvision import datasets, transforms
 from torchvision.models import resnet18, ResNet18_Weights
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split, Subset
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, classification_report
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+
 
 DEVICE = (
     "cuda" if torch.cuda.is_available()
@@ -20,6 +22,7 @@ DEVICE = (
 
 print(f"Using device: {DEVICE}")
 
+
 BATCH_SIZE = 32
 EPOCHS = 5
 LR = 1e-4
@@ -27,6 +30,8 @@ LR = 1e-4
 TRAIN_DIR = "data/Training"
 TEST_DIR = "data/Testing"
 
+
+# Train transforms (augmentation ON)
 train_transforms = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.RandomHorizontalFlip(),
@@ -36,6 +41,8 @@ train_transforms = transforms.Compose([
                          std=[0.229, 0.224, 0.225])
 ])
 
+
+# Validation/Test transforms (augmentation OFF)
 test_transforms = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -43,38 +50,65 @@ test_transforms = transforms.Compose([
                          std=[0.229, 0.224, 0.225])
 ])
 
-# Dataset
-train_dataset = datasets.ImageFolder(TRAIN_DIR, transform=train_transforms)
+# Datasets
+full_train_dataset = datasets.ImageFolder(TRAIN_DIR, transform=train_transforms)
+full_val_dataset = datasets.ImageFolder(TRAIN_DIR, transform=test_transforms)
+
 test_dataset = datasets.ImageFolder(TEST_DIR, transform=test_transforms)
 
+
+# Reproducible split
+torch.manual_seed(42)
+
+train_size = int(0.8 * len(full_train_dataset))
+val_size = len(full_train_dataset) - train_size
+
+
+# Split indices (same split for train and val)
+train_indices, val_indices = random_split(range(len(full_train_dataset)), [train_size, val_size])
+
+
+# Create train subset (with augmentation)
+train_dataset = Subset(full_train_dataset, train_indices.indices)
+
+# Create validation subset (without augmentation)
+val_dataset = Subset(full_val_dataset, val_indices.indices)
+
+# DataLoaders
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
 test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-NUM_CLASSES = len(train_dataset.classes)
-print("Classes:", train_dataset.classes)
+NUM_CLASSES = len(full_train_dataset.classes)
+print("Classes:", full_train_dataset.classes)
 
-# Model (Transfer Learning)
+
+# Model
 model = resnet18(weights=ResNet18_Weights.DEFAULT)
 model.fc = nn.Linear(model.fc.in_features, NUM_CLASSES)
 model = model.to(DEVICE)
+
 
 # Grad-CAM Setup
 target_layer = model.layer4[-1]
 cam = GradCAM(model=model, target_layers=[target_layer])
 
+
 # Loss & Optimizer
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=LR)
 
-# Training Function
+# Training
 def train():
     model.train()
     total_loss = 0
 
     for images, labels in train_loader:
-        images, labels = images.to(DEVICE), labels.to(DEVICE)
+        images = images.to(DEVICE)
+        labels = labels.to(DEVICE)
 
         optimizer.zero_grad()
+
         outputs = model(images)
         loss = criterion(outputs, labels)
 
@@ -85,9 +119,44 @@ def train():
 
     return total_loss / len(train_loader)
 
-# Evaluation
+
+# Validation
 def evaluate():
     model.eval()
+
+    all_preds = []
+    all_labels = []
+
+    with torch.no_grad():
+        for images, labels in val_loader:
+            images = images.to(DEVICE)
+
+            outputs = model(images)
+            preds = torch.argmax(outputs, dim=1).cpu().numpy()
+
+            all_preds.extend(preds)
+            all_labels.extend(labels.numpy())
+
+    all_preds = np.array(all_preds)
+    all_labels = np.array(all_labels)
+
+    acc = accuracy_score(all_labels, all_preds)
+    precision = precision_score(all_labels, all_preds, average="macro", zero_division=0)
+    recall = recall_score(all_labels, all_preds, average="macro", zero_division=0)
+    f1 = f1_score(all_labels, all_preds, average="macro", zero_division=0)
+
+    print("\nValidation Classification Report:")
+    print(classification_report(all_labels, all_preds, target_names=full_train_dataset.classes))
+    print("Validation Confusion Matrix:")
+    print(confusion_matrix(all_labels, all_preds))
+
+    return acc, precision, recall, f1
+
+
+# Final Test
+def test():
+    model.eval()
+
     all_preds = []
     all_labels = []
 
@@ -104,31 +173,28 @@ def evaluate():
     all_preds = np.array(all_preds)
     all_labels = np.array(all_labels)
 
-    # Metrics
     acc = accuracy_score(all_labels, all_preds)
     precision = precision_score(all_labels, all_preds, average="macro", zero_division=0)
     recall = recall_score(all_labels, all_preds, average="macro", zero_division=0)
     f1 = f1_score(all_labels, all_preds, average="macro", zero_division=0)
 
-    print("\nClassification Report:")
-    print(classification_report(all_labels, all_preds, target_names=train_dataset.classes))
-
-    print("Confusion Matrix:")
+    print("\nFinal Test Classification Report:")
+    print(classification_report(all_labels, all_preds, target_names=full_train_dataset.classes))
+    print("Final Test Confusion Matrix:")
     print(confusion_matrix(all_labels, all_preds))
 
     return acc, precision, recall, f1
+
 
 # Grad-CAM Visualization
 def visualize_gradcam(image_path):
     model.eval()
 
-    # Load image
     img = cv2.imread(image_path)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img = cv2.resize(img, (224, 224))
     img = img / 255.0
 
-    # Transform
     input_tensor = test_transforms(
         transforms.ToPILImage()(img.astype(np.float32))
     ).unsqueeze(0).to(DEVICE)
@@ -151,7 +217,7 @@ if __name__ == "__main__":
     best_acc = 0
 
     for epoch in range(EPOCHS):
-        print(f"\n===== Epoch {epoch+1}/{EPOCHS} =====")
+        print(f"\n===== Epoch {epoch + 1}/{EPOCHS} =====")
 
         loss = train()
         acc, precision, recall, f1 = evaluate()
@@ -166,7 +232,11 @@ if __name__ == "__main__":
         print(f"Precision: {precision:.4f}")
         print(f"Recall: {recall:.4f}")
         print(f"F1 Score: {f1:.4f}")
-    
+
+    print("\n===== Final Test Evaluation =====")
+    model.load_state_dict(torch.load("best_model.pth"))
+    test()
+
     visualize_gradcam("data/Testing/glioma/Te-gl_100.jpg")
     visualize_gradcam("data/Testing/meningioma/Te-me_10.jpg")
     visualize_gradcam("data/Testing/notumor/Te-no_20.jpg")
