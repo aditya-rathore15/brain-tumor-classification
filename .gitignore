@@ -4,3 +4,7 @@ venv/
 .env
 data/
 .DS_Store
+
+# Model weights
+*.pth
+*.pt
