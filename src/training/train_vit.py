@@ -6,7 +6,7 @@ import numpy as np
 import cv2
 from torchvision import datasets, transforms
 from torchvision.models import vit_b_16, ViT_B_16_Weights
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split, Subset
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, classification_report
 # from pytorch_grad_cam import GradCAM
 # from pytorch_grad_cam.utils.image import show_cam_on_image
@@ -43,15 +43,32 @@ test_transforms = transforms.Compose([
                          std=[0.229, 0.224, 0.225])
 ])
 
-# Dataset
-train_dataset = datasets.ImageFolder(TRAIN_DIR, transform=train_transforms)
+# Datasets
+full_train_dataset = datasets.ImageFolder(TRAIN_DIR, transform=train_transforms)
+full_val_dataset = datasets.ImageFolder(TRAIN_DIR, transform=test_transforms)
 test_dataset = datasets.ImageFolder(TEST_DIR, transform=test_transforms)
 
+# Reproducible split
+torch.manual_seed(42)
+
+train_size = int(0.8 * len(full_train_dataset))
+val_size = len(full_train_dataset) - train_size
+
+# Split indices (same split for train and val)
+train_indices, val_indices = random_split(range(len(full_train_dataset)), [train_size, val_size])
+
+# Create train subset (with augmentation)
+train_dataset = Subset(full_train_dataset, train_indices.indices)
+
+# Create validation subset (without augmentation)
+val_dataset = Subset(full_val_dataset, val_indices.indices)
+
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
 test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-NUM_CLASSES = len(train_dataset.classes)
-print("Classes:", train_dataset.classes)
+NUM_CLASSES = len(full_train_dataset.classes)
+print("Classes:", full_train_dataset.classes)
 
 # Model (Transfer Learning)
 model = vit_b_16(weights=ViT_B_16_Weights.DEFAULT)
@@ -85,14 +102,14 @@ def train():
 
     return total_loss / len(train_loader)
 
-# Evaluation
+# Validation
 def evaluate():
     model.eval()
     all_preds = []
     all_labels = []
 
     with torch.no_grad():
-        for images, labels in test_loader:
+        for images, labels in val_loader:
             images = images.to(DEVICE)
 
             outputs = model(images)
@@ -110,10 +127,42 @@ def evaluate():
     recall = recall_score(all_labels, all_preds, average="macro", zero_division=0)
     f1 = f1_score(all_labels, all_preds, average="macro", zero_division=0)
 
-    print("\nClassification Report:")
-    print(classification_report(all_labels, all_preds, target_names=train_dataset.classes))
+    print("\nValidation Classification Report:")
+    print(classification_report(all_labels, all_preds, target_names=full_train_dataset.classes))
 
-    print("Confusion Matrix:")
+    print("Validation Confusion Matrix:")
+    print(confusion_matrix(all_labels, all_preds))
+
+    return acc, precision, recall, f1
+
+# Final Test
+def test():
+    model.eval()
+    all_preds = []
+    all_labels = []
+
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images = images.to(DEVICE)
+
+            outputs = model(images)
+            preds = torch.argmax(outputs, dim=1).cpu().numpy()
+
+            all_preds.extend(preds)
+            all_labels.extend(labels.numpy())
+
+    all_preds = np.array(all_preds)
+    all_labels = np.array(all_labels)
+
+    acc = accuracy_score(all_labels, all_preds)
+    precision = precision_score(all_labels, all_preds, average="macro", zero_division=0)
+    recall = recall_score(all_labels, all_preds, average="macro", zero_division=0)
+    f1 = f1_score(all_labels, all_preds, average="macro", zero_division=0)
+
+    print("\nFinal Test Classification Report:")
+    print(classification_report(all_labels, all_preds, target_names=full_train_dataset.classes))
+
+    print("Final Test Confusion Matrix:")
     print(confusion_matrix(all_labels, all_preds))
 
     return acc, precision, recall, f1
@@ -166,7 +215,11 @@ if __name__ == "__main__":
         print(f"Precision: {precision:.4f}")
         print(f"Recall: {recall:.4f}")
         print(f"F1 Score: {f1:.4f}")
-    
+
+    print("\n===== Final Test Evaluation =====")
+    model.load_state_dict(torch.load("best_vit_model.pth", map_location=DEVICE))
+    test()
+
     # visualize_gradcam("data/Testing/glioma/Te-gl_100.jpg")
     # visualize_gradcam("data/Testing/meningioma/Te-me_10.jpg")
     # visualize_gradcam("data/Testing/notumor/Te-no_20.jpg")
