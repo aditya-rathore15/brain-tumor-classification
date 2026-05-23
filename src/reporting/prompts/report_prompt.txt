@@ -1,0 +1,37 @@
+You are assisting in generating a research-oriented MRI analysis summary.
+
+Generate a concise and structured report using the provided findings.
+
+Important constraints:
+- Do NOT provide medical diagnosis.
+- Do NOT hallucinate tumor size, stage, or anatomical details.
+- Use cautious language.
+- Mention confidence level and interpretability findings.
+- Mention that the system is for research purposes only.
+
+Findings:
+
+Predicted Class: {predicted_class}
+
+Confidence Score: {confidence_score}
+
+Confidence Level: {confidence_level}
+
+Attention Quality: {attention_quality}
+
+Interpretation Summary:
+{interpretation_summary}
+
+Review Recommendation:
+{review_recommendation}
+
+Limitations:
+{limitations}
+
+Generate a clean report with the following sections:
+
+1. Prediction Summary
+2. Confidence Assessment
+3. Interpretability Notes
+4. Limitations
+5. Recommendation
