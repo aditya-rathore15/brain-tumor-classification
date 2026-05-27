@@ -1,0 +1,20 @@
+{
+    "predicted_class": "notumor",
+    "confidence_score": 0.9632,
+    "confidence_level": "high",
+    "probabilities": {
+        "glioma": 0.0085,
+        "meningioma": 0.0228,
+        "notumor": 0.9632,
+        "pituitary": 0.0054
+    },
+    "attention_quality": "localized",
+    "gradcam_path": "outputs/reports/gradcam_Te-no_10.jpg",
+    "review_recommendation": "Standard review recommended.",
+    "interpretation_summary": "The model predicts notumor with high confidence. Grad-CAM analysis indicates localized attention patterns.",
+    "limitations": [
+        "Research-use only",
+        "Not intended for clinical diagnosis",
+        "Requires specialist review"
+    ]
+}
