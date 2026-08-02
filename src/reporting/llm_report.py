@@ -1,9 +1,9 @@
 import os
-
-from findings_generator import generate_findings
+import json
 
 
 PROMPT_PATH = ("src/reporting/prompts/report_prompt.txt")
+DEFAULT_LLM_MODEL = "gpt-5"
 
 
 def load_prompt_template():
@@ -12,19 +12,7 @@ def load_prompt_template():
         return file.read()
 
 
-def build_report(findings):
-
-    prompt_template = load_prompt_template()
-
-    formatted_prompt = prompt_template.format(
-        predicted_class=findings["predicted_class"],
-        confidence_score=findings["confidence_score"],
-        confidence_level=findings["confidence_level"],
-        attention_quality=findings["attention_quality"],
-        interpretation_summary=findings["interpretation_summary"],
-        review_recommendation=findings["review_recommendation"],
-        limitations="\n- " + "\n- ".join(findings["limitations"])
-    )
+def build_template_report(findings):
 
     report = f"""
 # MRI Analysis Report
@@ -74,6 +62,74 @@ Grad-CAM Visualization:
     return report.strip()
 
 
+def build_llm_report(findings, model=None):
+
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise RuntimeError(
+            "The openai package is required for LLM report generation. "
+            "Install dependencies with: pip install -r requirements.txt"
+        ) from exc
+
+    if not os.getenv("OPENAI_API_KEY"):
+        raise RuntimeError(
+            "OPENAI_API_KEY is not set. Falling back to the template report."
+        )
+
+    prompt_template = load_prompt_template()
+
+    findings_json = json.dumps(
+        {
+            "predicted_class": findings["predicted_class"],
+            "confidence_score": findings["confidence_score"],
+            "confidence_level": findings["confidence_level"],
+            "probabilities": findings["probabilities"],
+            "attention_quality": findings["attention_quality"],
+            "gradcam_path": findings["gradcam_path"],
+            "interpretation_summary": findings["interpretation_summary"],
+            "review_recommendation": findings["review_recommendation"],
+            "limitations": findings["limitations"],
+        },
+        indent=2
+    )
+
+    formatted_prompt = prompt_template.format(
+        findings_json=findings_json
+    )
+
+    client = OpenAI()
+
+    response = client.responses.create(
+        model=model or os.getenv("OPENAI_REPORT_MODEL", DEFAULT_LLM_MODEL),
+        instructions=(
+            "You generate cautious research-use MRI analysis reports from "
+            "structured model outputs. Use only the provided findings. Do not "
+            "add diagnosis, tumor size, anatomical location, stage, treatment "
+            "advice, prognosis, or any clinical detail not present in the input."
+        ),
+        input=formatted_prompt,
+    )
+
+    return response.output_text.strip()
+
+
+def build_report(findings, use_llm=True):
+
+    llm_enabled = (
+        use_llm and
+        os.getenv("MRI_REPORT_USE_LLM", "1").lower() not in {"0", "false", "no"}
+    )
+
+    if llm_enabled:
+        try:
+            return build_llm_report(findings)
+        except Exception as exc:
+            print(f"LLM report generation unavailable: {exc}")
+
+    return build_template_report(findings)
+
+
 def save_report(report_text, output_path):
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -83,6 +139,8 @@ def save_report(report_text, output_path):
 
 
 if __name__ == "__main__":
+
+    from findings_generator import generate_findings
 
     image_path = ("data/Testing/notumor/Te-no_10.jpg")
 

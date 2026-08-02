@@ -263,6 +263,37 @@ python3 src/reporting/generate_report.py \
 --image data/Testing/notumor/Te-no_10.jpg
 ```
 
+By default, report generation uses an LLM when `OPENAI_API_KEY` is available
+and falls back to a deterministic template when it is not. The LLM receives
+only structured model findings, including the predicted class, confidence
+score, class probabilities, Grad-CAM path, attention quality, recommendation,
+and limitations.
+
+Enable LLM-assisted reporting:
+
+```bash
+export OPENAI_API_KEY="your_api_key"
+python3 src/reporting/generate_report.py \
+--image data/Testing/notumor/Te-no_10.jpg
+```
+
+Use a specific OpenAI model:
+
+```bash
+export OPENAI_REPORT_MODEL="gpt-5"
+```
+
+Force template-only reporting:
+
+```bash
+export MRI_REPORT_USE_LLM=0
+```
+
+The LLM prompt is constrained to avoid unsupported clinical claims such as
+tumor size, anatomical location, stage, treatment advice, prognosis, or
+diagnostic certainty. This keeps the report grounded in the model outputs and
+research-use limitations.
+
 Generated outputs:
 
 ```text
